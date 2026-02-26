@@ -22,13 +22,12 @@ var redCandle = lipgloss.NewStyle().Foreground(lipgloss.Color("160"))
 
 var axisStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0"))
 
-func generate_concurrent_candles() <-chan []float64 {
+func generate_concurrent_candles(ch chan []float64) tea.Cmd {
 	// concurrent candle generator
-	ch := make(chan []float64)
+	// ch := make(chan []float64)
 
-	go func() {
-		defer close(ch)
-		i := 0.0
+	return func() tea.Msg {
+		i := 0
 		for {
 			time.Sleep(500 * time.Millisecond)
 
@@ -38,13 +37,11 @@ func generate_concurrent_candles() <-chan []float64 {
 			candle[1] = candle[0] + 2*scale
 			candle[2] = candle[0] + 4*scale
 			candle[3] = candle[2] - 2*scale
-			candle[4] = i
-			i += 2.0
+			candle[4] = float64(i)
+			i++
 			ch <- candle
 		}
-	}()
-
-	return ch
+	}
 }
 
 func (m model) draw_candle(candle []float64) {
@@ -65,13 +62,22 @@ func (m model) draw_candle(candle []float64) {
 	)
 }
 
+type candleListener []float64
+
+func candleTeaMsg(ch chan []float64) tea.Cmd {
+	return func() tea.Msg {
+		return candleListener(<-ch)
+	}
+}
+
 type model struct {
 	c1     canvas.Model
 	cursor canvas.Point
+	candle chan []float64
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(generate_concurrent_candles(m.candle), candleTeaMsg(m.candle))
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -81,12 +87,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
+	case candleListener:
+		c := <-m.candle
+		m.draw_candle(c)
+		return m, candleTeaMsg(m.candle)
 	}
 
-	candle_ch := generate_concurrent_candles()
-
-	candle := <-candle_ch
-	m.draw_candle(candle)
 	return m, nil
 }
 
@@ -104,7 +110,7 @@ func main() {
 	h := 20
 	c1 := canvas.New(w, h)
 
-	m := model{c1, canvas.Point{0, h - 1}}
+	m := model{c1, canvas.Point{0, h - 1}, make(chan []float64)}
 	if _, err := tea.NewProgram(m).Run(); err != nil {
 		fmt.Println("Error running program: ", err)
 		os.Exit(1)
