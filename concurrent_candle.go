@@ -44,7 +44,7 @@ func generate_concurrent_candles(ch chan []float64) tea.Cmd {
 	}
 }
 
-func (m model) draw_candle(candle []float64) {
+func (m model) draw_candles(candles [][]float64) {
 	m.c1.Clear()
 	graph.DrawXYAxis(&m.c1, m.cursor, axisStyle)
 
@@ -52,14 +52,16 @@ func (m model) draw_candle(candle []float64) {
 	if rand.Intn(2) == 1 {
 		style = greenCandle
 	}
-	graph.DrawCandlestickBottomToTop(&m.c1,
-		m.cursor.Add(canvas.Point{X: int(candle[4]), Y: -1}),
-		candle[0],
-		candle[1],
-		candle[2],
-		candle[3],
-		style,
-	)
+	for _, candle := range candles {
+		graph.DrawCandlestickBottomToTop(&m.c1,
+			m.cursor.Add(canvas.Point{X: int(candle[4]), Y: -1}),
+			candle[0],
+			candle[1],
+			candle[2],
+			candle[3],
+			style,
+		)
+	}
 }
 
 type candleListener []float64
@@ -71,9 +73,10 @@ func candleTeaMsg(ch chan []float64) tea.Cmd {
 }
 
 type model struct {
-	c1     canvas.Model
-	cursor canvas.Point
-	candle chan []float64
+	c1      canvas.Model
+	cursor  canvas.Point
+	candle  chan []float64
+	candles [][]float64
 }
 
 func (m model) Init() tea.Cmd {
@@ -89,7 +92,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case candleListener:
 		c := <-m.candle
-		m.draw_candle(c)
+		m.candles = append(m.candles, c)
+		m.draw_candles(m.candles)
 		return m, candleTeaMsg(m.candle)
 	}
 
@@ -109,8 +113,9 @@ func main() {
 	w := 40
 	h := 20
 	c1 := canvas.New(w, h)
+	cs := [][]float64{}
 
-	m := model{c1, canvas.Point{0, h - 1}, make(chan []float64)}
+	m := model{c1, canvas.Point{0, h - 1}, make(chan []float64), cs}
 	if _, err := tea.NewProgram(m).Run(); err != nil {
 		fmt.Println("Error running program: ", err)
 		os.Exit(1)
